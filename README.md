@@ -1,4 +1,4 @@
-# soft_uarts for raspberry pi (tested on 4b only)
+# soft_uarts for raspberry pi (tested on 4b)
 
 Software-based serial port module for Raspberry Pi. 
 
@@ -43,11 +43,6 @@ I haven't tried cross-compiling this module, but it should work as well.
 Loading the module:
 ```
 sudo insmod soft_uart.ko
-```
-
-Loading module with custom parameters:
-```
-sudo insmod soft_uart.ko gpio_tx=10 gpio_rx=11
 ```
 
 ## GPIO Pins
