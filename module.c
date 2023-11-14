@@ -109,7 +109,7 @@ static int __init soft_uart_init(void)
     soft_uart_driver->owner                 = THIS_MODULE;
     soft_uart_driver->driver_name           = "soft_uart";
     soft_uart_driver->name                  = "ttySOFT";
-    soft_uart_driver->major                 = soft_uart_MAJOR;
+    soft_uart_driver->major                 = SOFT_UART_MAJOR;
     soft_uart_driver->minor_start           = 0;
     soft_uart_driver->flags                 = TTY_DRIVER_REAL_RAW;
     soft_uart_driver->type                  = TTY_DRIVER_TYPE_SERIAL;
@@ -292,7 +292,7 @@ static void soft_uart_set_termios(struct tty_struct* tty, const struct ktermios*
   }
   
   // Configure the baudrate.
-  if (!raspberry_soft_uart_set_baudrate(baudrate))
+  if (!raspberry_soft_uart_set_baudrate(tty->index, baudrate))
   {
     printk(KERN_ALERT "soft_uart: Invalid baudrate.\n");
   }

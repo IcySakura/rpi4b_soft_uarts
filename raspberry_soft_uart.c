@@ -35,6 +35,8 @@ static int* gpio_rx = NULL;
 static int rx_bit_index = -1;
 static void (*rx_callback)(unsigned char) = NULL;
 
+const static int uart_indexes[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+
 /**
  * Initializes the Raspberry Soft UART infrastructure.
  * This must be called during the module initialization.
@@ -46,6 +48,7 @@ static void (*rx_callback)(unsigned char) = NULL;
  */
 int raspberry_soft_uart_init(const int _gpio_tx[], const int _gpio_rx[])
 {
+    printk(KERN_INFO "soft_uart: calling raspberry_soft_uart_init.\n");
     bool success = true;
 
     // Initializes mem.
@@ -120,7 +123,7 @@ int raspberry_soft_uart_init(const int _gpio_tx[], const int _gpio_rx[])
             handle_rx_start,
             IRQF_TRIGGER_FALLING,
             "soft_uart_irq_handler",
-            &i);
+            &(uart_indexes[i]));
         success &= request_result == 0;
         disable_irq(gpio_to_irq(gpio_rx[i]));
         printk(KERN_INFO "soft_uart: result after requesting gpio_rx irq: %d (%d).\n", success, request_result);
@@ -134,10 +137,12 @@ int raspberry_soft_uart_init(const int _gpio_tx[], const int _gpio_rx[])
  */
 int raspberry_soft_uart_finalize(void)
 {
+    printk(KERN_INFO "soft_uart: finalizing soft uart...\n");
+
     // free resources
     for (int i = 0; i < N_PORTS; ++i)
     {
-        free_irq(gpio_to_irq(gpio_rx[i]), NULL);
+        free_irq(gpio_to_irq(gpio_rx[i]), &(uart_indexes[i]));
         gpio_set_value(gpio_tx[i], 0);
         gpio_free(gpio_tx[i]);
         gpio_free(gpio_rx[i]);
@@ -190,6 +195,7 @@ int raspberry_soft_uart_finalize(void)
  */
 int raspberry_soft_uart_open(struct tty_struct* tty)
 {
+    printk(KERN_INFO "soft_uart: calling raspberry_soft_uart_open.\n");
     printk(KERN_INFO "soft_uart: opening index: %d, NULL status: %d.\n", tty->index, current_ttys[tty->index] == NULL);
 
     int success = 0;
@@ -211,6 +217,9 @@ int raspberry_soft_uart_open(struct tty_struct* tty)
  */
 int raspberry_soft_uart_close(struct tty_struct* tty)
 {
+    printk(KERN_INFO "soft_uart: calling raspberry_soft_uart_close.\n");
+    printk(KERN_INFO "soft_uart: closing index: %d, NULL status: %d\n", tty->index, current_ttys[tty->index] == NULL);
+
     mutex_lock(&(current_tty_mutexes[tty->index]));
     disable_irq(gpio_to_irq(gpio_rx[tty->index]));
     // hrtimer_cancel(&(timer_tx[tty->index]));
@@ -227,12 +236,13 @@ int raspberry_soft_uart_close(struct tty_struct* tty)
  * @param baudrate desired baudrate
  * @return 1 if the operation is successful. 0 otherwise.
  */
-int raspberry_soft_uart_set_baudrate(const int baudrate) 
+int raspberry_soft_uart_set_baudrate(const int index, const int baudrate) 
 {
+    printk(KERN_INFO "soft_uart: setting index: %d with baudrate: %d\n", index, baudrate);
+
     period = ktime_set(0, 1000000000/baudrate);
     half_period = ktime_set(0, 1000000000/baudrate/2);
-    for (int i = 0; i < N_PORTS; ++i)
-        gpio_set_debounce(gpio_rx[i], 1000/baudrate/2);
+    gpio_set_debounce(gpio_rx[index], 1000/baudrate/2);
     return 1;
 }
 
@@ -243,8 +253,10 @@ int raspberry_soft_uart_set_baudrate(const int baudrate)
  * @param string_size size of the given string
  * @return The amount of characters successfully added to the queue.
  */
-int raspberry_soft_uart_send_string(int index, const unsigned char* string, int string_size)
+int raspberry_soft_uart_send_string(const int index, const unsigned char* string, const int string_size)
 {
+    // printk(KERN_INFO "soft_uart: sending string with size: %d to index: %d\n", string_size, index);
+
     int result = enqueue_string(&(queues_tx[index]), string, string_size);
     
     // Starts the TX timer if it is not already running.
@@ -260,18 +272,18 @@ int raspberry_soft_uart_send_string(int index, const unsigned char* string, int 
  * Gets the number of characters that can be added to the TX queue.
  * @return number of characters.
  */
-int raspberry_soft_uart_get_tx_queue_room(int index)
+int raspberry_soft_uart_get_tx_queue_room(const int index)
 {
-  return get_queue_room(&(queues_tx[index]));
+    return get_queue_room(&(queues_tx[index]));
 }
 
 /*
  * Gets the number of characters in the TX queue.
  * @return number of characters.
  */
-int raspberry_soft_uart_get_tx_queue_size(int index)
+int raspberry_soft_uart_get_tx_queue_size(const int index)
 {
-  return get_queue_size(&(queues_tx[index]));
+    return get_queue_size(&(queues_tx[index]));
 }
 
 /**
@@ -280,6 +292,8 @@ int raspberry_soft_uart_get_tx_queue_size(int index)
  */
 int raspberry_soft_uart_set_rx_callback(void (*callback)(unsigned char))
 {
+    // printk(KERN_INFO "soft_uart: calling raspberry_soft_uart_set_rx_callback.\n");
+
 	rx_callback = callback;
 	return 1;
 }
@@ -294,7 +308,14 @@ int raspberry_soft_uart_set_rx_callback(void (*callback)(unsigned char))
  */
 static irqreturn_t handle_rx_start(int irq, void *device)
 {
+    // printk(KERN_INFO "soft_uart: calling handle_rx_start.\n");
+
+    // if (device == NULL)
+    //     printk(KERN_INFO "soft_uart: handle_rx_start has NULL for uart index.\n");
+
     int uart_index = *(int*)device;
+
+    // printk(KERN_INFO "soft_uart: calling handle_rx_start with uart_index: %d.\n", uart_index);
 
     if (rx_bit_index == -1)
     {
@@ -310,6 +331,10 @@ static irqreturn_t handle_rx_start(int irq, void *device)
 static enum hrtimer_restart handle_tx(struct hrtimer* timer)
 {
     struct hrtimer_identifier_data *tx_id_data = container_of(timer, struct hrtimer_identifier_data, hr_timer);
+
+    // if (tx_id_data == NULL)
+    //     printk(KERN_INFO "soft_uart: handle_tx has NULL for tx_id_data.\n");
+    // printk(KERN_INFO "soft_uart: handle_tx for index: %d\n", tx_id_data->current_uart_index);
 
     ktime_t current_time = ktime_get();
     static unsigned char character = 0;
@@ -360,7 +385,12 @@ static enum hrtimer_restart handle_tx(struct hrtimer* timer)
  */
 static enum hrtimer_restart handle_rx(struct hrtimer* timer)
 {
+
     struct hrtimer_identifier_data *rx_id_data = container_of(timer, struct hrtimer_identifier_data, hr_timer);
+
+    // if (rx_id_data == NULL)
+    //     printk(KERN_INFO "soft_uart: handle_rx has NULL for rx_id_data.\n");
+    // printk(KERN_INFO "soft_uart: handle_rx for index: %d\n", rx_id_data->current_uart_index);
 
     ktime_t current_time = ktime_get();
     static unsigned int character = 0;
@@ -417,6 +447,8 @@ static enum hrtimer_restart handle_rx(struct hrtimer* timer)
  */
 void receive_character(int index, unsigned char character)
 {
+    // printk(KERN_INFO "soft_uart: receive_character for index: %d\n", index);
+
     mutex_lock(&(current_tty_mutexes[index]));
     if (rx_callback != NULL) {
         (*rx_callback)(character);
@@ -424,14 +456,14 @@ void receive_character(int index, unsigned char character)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0)
     if (current_ttys[index] != NULL && current_ttys[index]->port != NULL)
     {
-    tty_insert_flip_char(current_ttys[index]->port, character, TTY_NORMAL);
-    tty_flip_buffer_push(current_ttys[index]->port);
+        tty_insert_flip_char(current_ttys[index]->port, character, TTY_NORMAL);
+        tty_flip_buffer_push(current_ttys[index]->port);
     }
 #else
     if (tty != NULL)
     {
-    tty_insert_flip_char(current_ttys[index], character, TTY_NORMAL);
-    tty_flip_buffer_push(tty);
+        tty_insert_flip_char(current_ttys[index], character, TTY_NORMAL);
+        tty_flip_buffer_push(tty);
     }
 #endif
     }
