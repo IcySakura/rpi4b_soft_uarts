@@ -1,4 +1,4 @@
-# soft_uart
+# soft_uarts for raspberry pi (tested on 4b only)
 
 Software-based serial port module for Raspberry Pi. 
 
