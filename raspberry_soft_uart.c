@@ -10,6 +10,9 @@
 #include <linux/tty_flip.h>
 #include <linux/version.h>
 
+// To get gpiod_set_debounce() working for replacing gpio_set_debounce()
+#include <linux/gpio/consumer.h>
+
 struct hrtimer_identifier_data {
     struct hrtimer hr_timer;
     int current_uart_index;
@@ -31,6 +34,7 @@ static ktime_t period;
 static ktime_t half_period;
 static int* gpio_tx = NULL;
 static int* gpio_rx = NULL;
+struct gpio_desc** gpio_rx_descs = NULL;
 // static int* gpio_rx_irq_markers = NULL;
 static int rx_bit_index = -1;
 static void (*rx_callback)(unsigned char) = NULL;
@@ -58,6 +62,8 @@ int raspberry_soft_uart_init(const int _gpio_tx[], const int _gpio_rx[])
         gpio_tx = (int*) kmalloc(sizeof(int) * N_PORTS, GFP_KERNEL);
     if (!gpio_rx)
         gpio_rx = (int*) kmalloc(sizeof(int) * N_PORTS, GFP_KERNEL);
+    if (!gpio_rx_descs)
+        gpio_rx_descs = (struct gpio_desc**) kmalloc(sizeof(struct gpio_desc*) * N_PORTS, GFP_KERNEL);
     // if (!gpio_rx_irq_markers)
     //     gpio_rx_irq_markers = (int*) kmalloc(sizeof(int) * N_PORTS, GFP_KERNEL);
     // if (!timer_tx)
@@ -115,6 +121,7 @@ int raspberry_soft_uart_init(const int _gpio_tx[], const int _gpio_rx[])
         request_result = gpio_direction_input(gpio_rx[i]);
         success &= request_result == 0;
         printk(KERN_INFO "soft_uart: result after requesting gpio_rx direction: %d (%d).\n", success, request_result);
+        gpio_rx_descs[i] = gpio_to_desc(gpio_rx[i]);
         
         // Initializes the interruption.
         // gpio_rx_irq_markers[i] = gpio_to_irq(gpio_rx[i]);
@@ -159,6 +166,8 @@ int raspberry_soft_uart_finalize(void)
         kfree(gpio_tx);
     if (gpio_rx)
         kfree(gpio_rx);
+    if (gpio_rx_descs)
+        kfree(gpio_rx_descs);
     // if (gpio_rx_irq_markers)
     //     kfree(gpio_rx_irq_markers);
 
@@ -242,7 +251,7 @@ int raspberry_soft_uart_set_baudrate(const int index, const int baudrate)
 
     period = ktime_set(0, 1000000000/baudrate);
     half_period = ktime_set(0, 1000000000/baudrate/2);
-    gpio_set_debounce(gpio_rx[index], 1000/baudrate/2);
+    gpiod_set_debounce(gpio_rx_descs[index], 1000/baudrate/2);
     return 1;
 }
 
