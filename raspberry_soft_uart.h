@@ -2,6 +2,7 @@
 #define RASPBERRY_soft_uart_H
 
 #include <linux/tty.h>
+#include<linux/slab.h>
 
 #define SOFT_UART_MAJOR            0
 #define N_PORTS                    8    // Note that the program is default to only be able to handle at most 8 ports

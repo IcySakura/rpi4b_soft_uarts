@@ -83,7 +83,8 @@ int raspberry_soft_uart_init(const int _gpio_tx[], const int _gpio_rx[])
     int request_result = 0;
 
     // Set up uart one by one
-    for (int i = 0; i < N_PORTS; ++i)
+    int i;
+    for (i = 0; i < N_PORTS; ++i)
     {
         // Give NULLs
         current_ttys[i] = NULL;
@@ -147,7 +148,8 @@ int raspberry_soft_uart_finalize(void)
     printk(KERN_INFO "soft_uart: finalizing soft uart...\n");
 
     // free resources
-    for (int i = 0; i < N_PORTS; ++i)
+    int i;
+    for (i = 0; i < N_PORTS; ++i)
     {
         free_irq(gpio_to_irq(gpio_rx[i]), &(uart_indexes[i]));
         gpio_set_value(gpio_tx[i], 0);
@@ -172,7 +174,7 @@ int raspberry_soft_uart_finalize(void)
     //     kfree(gpio_rx_irq_markers);
 
     // free all hrtimers
-    for (int i = 0; i < N_PORTS; ++i)
+    for (i = 0; i < N_PORTS; ++i)
     {
         if (timer_tx_id_data[i])
             kfree(timer_tx_id_data[i]);

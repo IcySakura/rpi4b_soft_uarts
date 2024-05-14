@@ -79,7 +79,8 @@ static int __init soft_uart_init(void)
 
     // Initializes the ports.
     ports = (struct tty_port*) kmalloc(sizeof(struct tty_port) * N_PORTS, GFP_KERNEL);
-    for (int i = 0; i < N_PORTS; ++i)
+    int i;
+    for (i = 0; i < N_PORTS; ++i)
         tty_port_init(&(ports[i]));
 
     // Allocates the driver.
@@ -124,7 +125,7 @@ static int __init soft_uart_init(void)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0)
     // Link the ports with the driver.
-    for (int i = 0; i < N_PORTS; ++i)
+    for (i = 0; i < N_PORTS; ++i)
         tty_port_link_device(&(ports[i]), soft_uart_driver, i);
 #endif
 
