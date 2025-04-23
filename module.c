@@ -12,12 +12,12 @@ MODULE_AUTHOR("Adriano Marto Reis");
 MODULE_DESCRIPTION("Software-UART for Raspberry Pi");
 MODULE_VERSION("0.2");
 
-static unsigned gpio_tx[8] = {2, 4, 15, 17, 22, 24, 9, 8};
-// static char* gpio_tx_names[8] = {"SDA1", "GPIO_GCLK", "RXD1", "GPIO17", "GPIO22", "GPIO24", "SPI_MISO", "SPI_CE0_N"};
+// static unsigned gpio_tx[8] = {2, 4, 15, 17, 22, 24, 9, 8};
+static char* gpio_tx_names[8] = {"SDA1", "GPIO_GCLK", "RXD1", "GPIO17", "GPIO22", "GPIO24", "SPI_MISO", "SPI_CE0_N"};
 // module_param_array(gpio_tx, int, NULL, 0);
 
-static unsigned gpio_rx[8] = {3, 14, 18, 27, 23, 10, 25, 11};
-// static char* gpio_rx_names[8] = {"SCL1", "GPIO14", "GPIO18", "GPIO27", "GPIO23", "SPI_MOSI", "GPIO25", "SPI_SCLK"};
+// static unsigned gpio_rx[8] = {3, 14, 18, 27, 23, 10, 25, 11};
+static char* gpio_rx_names[8] = {"SCL1", "GPIO14", "GPIO18", "GPIO27", "GPIO23", "SPI_MOSI", "GPIO25", "SPI_SCLK"};
 // module_param_array(gpio_rx, int, NULL, 0);
 
 // Module prototypes.
@@ -70,8 +70,8 @@ static int __init soft_uart_init(void)
 {
     printk(KERN_INFO "soft_uart: Initializing module...\n");
     
-    if (!raspberry_soft_uart_init(gpio_tx, gpio_rx))
-    // if (!raspberry_soft_uart_init(gpio_tx_names, gpio_rx_names))
+    // if (!raspberry_soft_uart_init(gpio_tx, gpio_rx))
+    if (!raspberry_soft_uart_init(gpio_tx_names, gpio_rx_names))
     {
         printk(KERN_ALERT "soft_uart: Failed initialize GPIO.\n");
         return -ENOMEM;
@@ -150,7 +150,8 @@ static int __init soft_uart_init(void)
 static void __exit soft_uart_exit(void)
 {
     // Finalizes the soft UART.
-    if (!raspberry_soft_uart_finalize(gpio_tx, gpio_rx))
+    // if (!raspberry_soft_uart_finalize(gpio_tx, gpio_rx))
+    if (!raspberry_soft_uart_finalize())
     {
         printk(KERN_ALERT "soft_uart: Something went wrong whilst finalizing the soft UART.\n");
     }

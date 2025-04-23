@@ -58,8 +58,8 @@ static int bcm_to_rpi5_gpio(const int bcm_gpio)
  * @param gpio_rx GPIO pins used as RXs
  * @return 1 if the initialization is successful. 0 otherwise.
  */
-int raspberry_soft_uart_init(const unsigned _gpio_tx[], const unsigned _gpio_rx[])
-// int raspberry_soft_uart_init(const char* _gpio_tx[], const char* _gpio_rx[])
+// int raspberry_soft_uart_init(const unsigned _gpio_tx[], const unsigned _gpio_rx[])
+int raspberry_soft_uart_init(const char* _gpio_tx[], const char* _gpio_rx[])
 {
     printk(KERN_INFO "soft_uart: calling raspberry_soft_uart_init.\n");
     bool success = true;
@@ -114,37 +114,37 @@ int raspberry_soft_uart_init(const unsigned _gpio_tx[], const unsigned _gpio_rx[
         // gpio_tx[i] = _gpio_tx[i];
         // gpio_rx[i] = _gpio_rx[i];
 
-        if (gpio_request(_gpio_tx[i], "soft_uart_tx") != 0)
-        {
-            printk(KERN_ALERT "soft_uart: Failed to request GPIO %d for TX pin %s.\n", _gpio_tx[i], _gpio_tx[i]);
-            success = false;
-            goto Done_init;
-        }
-        gpio_tx_descs[i] = gpio_to_desc(_gpio_tx[i]);
+        // if (gpio_request(_gpio_tx[i], "soft_uart_tx") != 0)
+        // {
+        //     printk(KERN_ALERT "soft_uart: Failed to request GPIO %d for TX pin %s.\n", _gpio_tx[i], _gpio_tx[i]);
+        //     success = false;
+        //     goto Done_init;
+        // }
+        // gpio_tx_descs[i] = gpio_to_desc(_gpio_tx[i]);
         // gpio_tx_descs[i] = gpio_to_desc(bcm_to_rpi5_gpio(_gpio_tx[i]));
-        // gpio_tx_descs[i] = gpiod_get(NULL, _gpio_tx[i], GPIOD_OUT_LOW);
-        // if (IS_ERR(gpio_tx_descs[i]))
-        // {
-        //     printk(KERN_ALERT "soft_uart: Failed to get GPIO descriptor for TX pin %s.\n", _gpio_tx[i]);
-        //     success = false;
-        //     goto Done_init;
-        // }
-
-        if (gpio_request(_gpio_rx[i], "soft_uart_rx") != 0)
+        gpio_tx_descs[i] = gpiod_get(NULL, _gpio_tx[i], GPIOD_OUT_LOW);
+        if (IS_ERR(gpio_tx_descs[i]))
         {
-            printk(KERN_ALERT "soft_uart: Failed to request GPIO %d for RX pin %s.\n", _gpio_rx[i], _gpio_rx[i]);
+            printk(KERN_ALERT "soft_uart: Failed to get GPIO descriptor for TX pin %s.\n", _gpio_tx[i]);
             success = false;
             goto Done_init;
         }
-        gpio_rx_descs[i] = gpio_to_desc(_gpio_rx[i]);
-        // gpio_rx_descs[i] = gpio_to_desc(bcm_to_rpi5_gpio(_gpio_rx[i]));
-        // gpio_rx_descs[i] = gpiod_get(NULL, _gpio_rx[i], GPIOD_IN);
-        // if (IS_ERR(gpio_rx_descs[i]))
+
+        // if (gpio_request(_gpio_rx[i], "soft_uart_rx") != 0)
         // {
-        //     printk(KERN_ALERT "soft_uart: Failed to get GPIO descriptor for RX pin %s.\n", _gpio_rx[i]);
+        //     printk(KERN_ALERT "soft_uart: Failed to request GPIO %d for RX pin %s.\n", _gpio_rx[i], _gpio_rx[i]);
         //     success = false;
         //     goto Done_init;
         // }
+        // gpio_rx_descs[i] = gpio_to_desc(_gpio_rx[i]);
+        // gpio_rx_descs[i] = gpio_to_desc(bcm_to_rpi5_gpio(_gpio_rx[i]));
+        gpio_rx_descs[i] = gpiod_get(NULL, _gpio_rx[i], GPIOD_IN);
+        if (IS_ERR(gpio_rx_descs[i]))
+        {
+            printk(KERN_ALERT "soft_uart: Failed to get GPIO descriptor for RX pin %s.\n", _gpio_rx[i]);
+            success = false;
+            goto Done_init;
+        }
 
         // request_result = gpio_request(gpio_tx[i], "soft_uart_tx");
         // success &= request_result == 0;
@@ -189,7 +189,8 @@ Done_init:
 /**
  * Finalizes the Raspberry Soft UART infrastructure.
  */
-int raspberry_soft_uart_finalize(const unsigned _gpio_tx[], const unsigned _gpio_rx[])
+// int raspberry_soft_uart_finalize(const unsigned _gpio_tx[], const unsigned _gpio_rx[])
+int raspberry_soft_uart_finalize(void)
 {
     printk(KERN_INFO "soft_uart: finalizing soft uart...\n");
 
@@ -203,10 +204,10 @@ int raspberry_soft_uart_finalize(const unsigned _gpio_tx[], const unsigned _gpio
         // gpio_set_value(gpio_tx[i], 0);
         gpiod_set_value(gpio_tx_descs[i], 0);
 
-        gpio_free(_gpio_tx[i]);
-        gpio_free(_gpio_rx[i]);
-        // gpiod_put(gpio_tx_descs[i]);
-        // gpiod_put(gpio_rx_descs[i]);
+        // gpio_free(_gpio_tx[i]);
+        // gpio_free(_gpio_rx[i]);
+        gpiod_put(gpio_tx_descs[i]);
+        gpiod_put(gpio_rx_descs[i]);
     }
 
     // below is for freeing mem
