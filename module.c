@@ -12,10 +12,10 @@ MODULE_AUTHOR("Adriano Marto Reis");
 MODULE_DESCRIPTION("Software-UART for Raspberry Pi");
 MODULE_VERSION("0.2");
 
-static int gpio_tx[8] = {2, 4, 15, 17, 22, 24, 9, 8};
+static unsigned gpio_tx[8] = {2, 4, 15, 17, 22, 24, 9, 8};
 // module_param_array(gpio_tx, int, NULL, 0);
 
-static int gpio_rx[8] = {3, 14, 18, 27, 23, 10, 25, 11};
+static unsigned gpio_rx[8] = {3, 14, 18, 27, 23, 10, 25, 11};
 // module_param_array(gpio_rx, int, NULL, 0);
 
 // Module prototypes.
@@ -116,9 +116,9 @@ static int __init soft_uart_init(void)
     soft_uart_driver->type                  = TTY_DRIVER_TYPE_SERIAL;
     soft_uart_driver->subtype               = SERIAL_TYPE_NORMAL;
     soft_uart_driver->init_termios          = tty_std_termios;
-    soft_uart_driver->init_termios.c_ispeed = 4800;
-    soft_uart_driver->init_termios.c_ospeed = 4800;
-    soft_uart_driver->init_termios.c_cflag  = B4800 | CREAD | CS8 | CLOCAL;
+    soft_uart_driver->init_termios.c_ispeed = 9600;
+    soft_uart_driver->init_termios.c_ospeed = 9600;
+    soft_uart_driver->init_termios.c_cflag  = B9600 | CREAD | CS8 | CLOCAL;
 
     // Sets the callbacks for the driver.
     tty_set_operations(soft_uart_driver, &soft_uart_operations);
@@ -146,8 +146,6 @@ static int __init soft_uart_init(void)
  */
 static void __exit soft_uart_exit(void)
 {
-    printk(KERN_INFO "soft_uart: Finalizing the module...\n");
-    
     // Finalizes the soft UART.
     if (!raspberry_soft_uart_finalize())
     {

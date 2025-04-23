@@ -26,20 +26,28 @@ static void receive_character(int index, unsigned char character);
 static struct queue* queues_tx = NULL;
 static struct tty_struct** current_ttys = NULL;
 static struct mutex* current_tty_mutexes = NULL;
-// static struct hrtimer* timer_tx = NULL;
 static struct hrtimer_identifier_data** timer_tx_id_data = NULL;
-// static struct hrtimer* timer_rx = NULL;
 static struct hrtimer_identifier_data** timer_rx_id_data = NULL;
 static ktime_t period;
 static ktime_t half_period;
-static int* gpio_tx = NULL;
-static int* gpio_rx = NULL;
+// static int* gpio_tx = NULL;
+struct gpio_desc** gpio_tx_descs = NULL;
+// static int* gpio_rx = NULL;
 struct gpio_desc** gpio_rx_descs = NULL;
-// static int* gpio_rx_irq_markers = NULL;
 static int rx_bit_index = -1;
 static void (*rx_callback)(unsigned char) = NULL;
 
-const static int uart_indexes[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+static const int uart_indexes[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+
+/* Convert BCM GPIO number to system GPIO number for Raspberry Pi 5 */
+static int bcm_to_rpi5_gpio(const int bcm_gpio)
+{
+    /* On Raspberry Pi 5, BCM GPIO 0-27 are mapped to system GPIO 571-598 */
+    if (bcm_gpio >= 0 && bcm_gpio <= 27) {
+        return bcm_gpio + 571;
+    }
+    return -1; /* Invalid GPIO */
+}
 
 /**
  * Initializes the Raspberry Soft UART infrastructure.
@@ -50,7 +58,7 @@ const static int uart_indexes[8] = {0, 1, 2, 3, 4, 5, 6, 7};
  * @param gpio_rx GPIO pins used as RXs
  * @return 1 if the initialization is successful. 0 otherwise.
  */
-int raspberry_soft_uart_init(const int _gpio_tx[], const int _gpio_rx[])
+int raspberry_soft_uart_init(const unsigned _gpio_tx[], const unsigned _gpio_rx[])
 {
     printk(KERN_INFO "soft_uart: calling raspberry_soft_uart_init.\n");
     bool success = true;
@@ -58,20 +66,16 @@ int raspberry_soft_uart_init(const int _gpio_tx[], const int _gpio_rx[])
     // Initializes mem.
     if (!queues_tx)
         queues_tx = (struct queue*) kmalloc(sizeof(struct queue) * N_PORTS, GFP_KERNEL);
-    if (!gpio_tx)
-        gpio_tx = (int*) kmalloc(sizeof(int) * N_PORTS, GFP_KERNEL);
-    if (!gpio_rx)
-        gpio_rx = (int*) kmalloc(sizeof(int) * N_PORTS, GFP_KERNEL);
+    // if (!gpio_tx)
+    //     gpio_tx = (int*) kmalloc(sizeof(int) * N_PORTS, GFP_KERNEL);
+    // if (!gpio_rx)
+    //     gpio_rx = (int*) kmalloc(sizeof(int) * N_PORTS, GFP_KERNEL);
+    if (!gpio_tx_descs)
+        gpio_tx_descs = (struct gpio_desc**) kmalloc(sizeof(struct gpio_desc*) * N_PORTS, GFP_KERNEL);
     if (!gpio_rx_descs)
         gpio_rx_descs = (struct gpio_desc**) kmalloc(sizeof(struct gpio_desc*) * N_PORTS, GFP_KERNEL);
-    // if (!gpio_rx_irq_markers)
-    //     gpio_rx_irq_markers = (int*) kmalloc(sizeof(int) * N_PORTS, GFP_KERNEL);
-    // if (!timer_tx)
-    //     timer_tx = (struct hrtimer*) kmalloc(sizeof(struct hrtimer) * N_PORTS, GFP_KERNEL);
     if (!timer_tx_id_data)
         timer_tx_id_data = (struct hrtimer_identifier_data**) kmalloc(sizeof(struct hrtimer_identifier_data*) * N_PORTS, GFP_KERNEL);
-    // if (!timer_rx)
-    //     timer_rx = (struct hrtimer*) kmalloc(sizeof(struct hrtimer) * N_PORTS, GFP_KERNEL);
     if (!timer_rx_id_data)
         timer_rx_id_data = (struct hrtimer_identifier_data**) kmalloc(sizeof(struct hrtimer_identifier_data*) * N_PORTS, GFP_KERNEL);
     if (!current_ttys)
@@ -96,47 +100,73 @@ int raspberry_soft_uart_init(const int _gpio_tx[], const int _gpio_rx[])
         timer_tx_id_data[i] = (struct hrtimer_identifier_data*) kmalloc(sizeof(struct hrtimer_identifier_data), GFP_KERNEL);
         hrtimer_init(&(timer_tx_id_data[i]->hr_timer), CLOCK_MONOTONIC, HRTIMER_MODE_REL);
         (timer_tx_id_data[i]->hr_timer).function = &handle_tx;
-        (timer_tx_id_data[i]->hr_timer)._softexpires = timer_tx_id_data[i];
+        // (timer_tx_id_data[i]->hr_timer)._softexpires = timer_tx_id_data[i];
         timer_tx_id_data[i]->current_uart_index = i;
         
         // Initializes the RX timer.
         timer_rx_id_data[i] = (struct hrtimer_identifier_data*) kmalloc(sizeof(struct hrtimer_identifier_data), GFP_KERNEL);
         hrtimer_init(&(timer_rx_id_data[i]->hr_timer), CLOCK_MONOTONIC, HRTIMER_MODE_REL);
         (timer_rx_id_data[i]->hr_timer).function = &handle_rx;
-        (timer_rx_id_data[i]->hr_timer)._softexpires = timer_rx_id_data[i];
+        // (timer_rx_id_data[i]->hr_timer)._softexpires = timer_rx_id_data[i];
         timer_rx_id_data[i]->current_uart_index = i;
 
-        gpio_tx[i] = _gpio_tx[i];
-        gpio_rx[i] = _gpio_rx[i];
+        // gpio_tx[i] = _gpio_tx[i];
+        // gpio_rx[i] = _gpio_rx[i];
 
-        request_result = gpio_request(gpio_tx[i], "soft_uart_tx");
-        success &= request_result == 0;
-        printk(KERN_INFO "soft_uart: result after requesting _gpio_tx: %d: %d (%d).\n", gpio_tx[i], success, request_result);
-        request_result = gpio_direction_output(gpio_tx[i], 1);
-        success &= request_result == 0;
-        printk(KERN_INFO "soft_uart: result after requesting _gpio_tx direction: %d (%d).\n", success, request_result);
+        gpio_tx_descs[i] = gpio_to_desc(_gpio_tx[i]);
+        // gpio_tx_descs[i] = gpio_to_desc(bcm_to_rpi5_gpio(_gpio_tx[i]));
+        if (!gpio_tx_descs[i])
+        {
+            printk(KERN_ALERT "soft_uart: Failed to get GPIO descriptor for TX pin %d.\n", _gpio_tx[i]);
+            success = false;
+            goto Done_init;
+        }
+        gpio_rx_descs[i] = gpio_to_desc(_gpio_rx[i]);
+        // gpio_rx_descs[i] = gpio_to_desc(bcm_to_rpi5_gpio(_gpio_rx[i]));
+        if (!gpio_rx_descs[i])
+        {
+            printk(KERN_ALERT "soft_uart: Failed to get GPIO descriptor for RX pin %d.\n", _gpio_rx[i]);
+            success = false;
+            goto Done_init;
+        }
 
-        request_result = gpio_request(gpio_rx[i], "soft_uart_rx");
+        // request_result = gpio_request(gpio_tx[i], "soft_uart_tx");
+        // success &= request_result == 0;
+        // printk(KERN_INFO "soft_uart: result after requesting _gpio_tx: %d: %d (%d).\n", gpio_tx[i], success, request_result);
+        // request_result = gpio_direction_output(gpio_tx[i], 1);
+        request_result = gpiod_direction_output(gpio_tx_descs[i], 1);
         success &= request_result == 0;
-        printk(KERN_INFO "soft_uart: result after requesting gpio_rx: %d: %d (%d).\n", gpio_rx[i], success, request_result);
-        request_result = gpio_direction_input(gpio_rx[i]);
+        // printk(KERN_INFO "soft_uart: result after requesting _gpio_tx direction: %d (%d).\n", success, request_result);
+
+        // request_result = gpio_request(gpio_rx[i], "soft_uart_rx");
+        // success &= request_result == 0;
+        // printk(KERN_INFO "soft_uart: result after requesting gpio_rx: %d: %d (%d).\n", gpio_rx[i], success, request_result);
+        // request_result = gpio_direction_input(gpio_rx[i]);
+        request_result = gpiod_direction_input(gpio_rx_descs[i]);
         success &= request_result == 0;
-        printk(KERN_INFO "soft_uart: result after requesting gpio_rx direction: %d (%d).\n", success, request_result);
-        gpio_rx_descs[i] = gpio_to_desc(gpio_rx[i]);
+        // printk(KERN_INFO "soft_uart: result after requesting gpio_rx direction: %d (%d).\n", success, request_result);
         
         // Initializes the interruption.
-        // gpio_rx_irq_markers[i] = gpio_to_irq(gpio_rx[i]);
+        // request_result = request_irq(
+        //     gpio_to_irq(gpio_rx[i]),
+        //     handle_rx_start,
+        //     IRQF_TRIGGER_FALLING,
+        //     "soft_uart_irq_handler",
+        //     &(uart_indexes[i]));
+        // success &= request_result == 0;
+        // disable_irq(gpio_to_irq(gpio_rx[i]));
         request_result = request_irq(
-            gpio_to_irq(gpio_rx[i]),
+            gpiod_to_irq(gpio_rx_descs[i]),
             handle_rx_start,
             IRQF_TRIGGER_FALLING,
             "soft_uart_irq_handler",
             &(uart_indexes[i]));
         success &= request_result == 0;
-        disable_irq(gpio_to_irq(gpio_rx[i]));
+        disable_irq(gpiod_to_irq(gpio_rx_descs[i]));
         printk(KERN_INFO "soft_uart: result after requesting gpio_rx irq: %d (%d).\n", success, request_result);
     }
         
+Done_init:
     return success;
 }
 
@@ -151,10 +181,14 @@ int raspberry_soft_uart_finalize(void)
     int i;
     for (i = 0; i < N_PORTS; ++i)
     {
-        free_irq(gpio_to_irq(gpio_rx[i]), &(uart_indexes[i]));
-        gpio_set_value(gpio_tx[i], 0);
-        gpio_free(gpio_tx[i]);
-        gpio_free(gpio_rx[i]);
+        // free_irq(gpio_to_irq(gpio_rx[i]), &(uart_indexes[i]));
+        // free_irq(gpiod_to_irq(gpio_rx_descs[i]), &(uart_indexes[i]));
+        // gpio_set_value(gpio_tx[i], 0);
+        // gpio_free(gpio_tx[i]);
+        // gpio_free(gpio_rx[i]);
+        gpiod_set_value(gpio_tx_descs[i], 0);
+        // gpiod_put(gpio_tx_descs[i]);
+        // gpiod_put(gpio_rx_descs[i]);
     }
 
     // below is for freeing mem
@@ -164,14 +198,14 @@ int raspberry_soft_uart_finalize(void)
         kfree(queues_tx);
 
     // free all pin number holders
-    if (gpio_tx)
-        kfree(gpio_tx);
-    if (gpio_rx)
-        kfree(gpio_rx);
+    // if (gpio_tx)
+    //     kfree(gpio_tx);
+    // if (gpio_rx)
+    //     kfree(gpio_rx);
+    if (gpio_tx_descs)
+        kfree(gpio_tx_descs);
     if (gpio_rx_descs)
         kfree(gpio_rx_descs);
-    // if (gpio_rx_irq_markers)
-    //     kfree(gpio_rx_irq_markers);
 
     // free all hrtimers
     for (i = 0; i < N_PORTS; ++i)
@@ -206,7 +240,6 @@ int raspberry_soft_uart_finalize(void)
  */
 int raspberry_soft_uart_open(struct tty_struct* tty)
 {
-    printk(KERN_INFO "soft_uart: calling raspberry_soft_uart_open.\n");
     printk(KERN_INFO "soft_uart: opening index: %d, NULL status: %d.\n", tty->index, current_ttys[tty->index] == NULL);
 
     int success = 0;
@@ -217,7 +250,8 @@ int raspberry_soft_uart_open(struct tty_struct* tty)
         current_ttys[tty->index] = tty;
         initialize_queue(&(queues_tx[tty->index]));
         success = 1;
-        enable_irq(gpio_to_irq(gpio_rx[tty->index]));
+        // enable_irq(gpio_to_irq(gpio_rx[tty->index]));
+        enable_irq(gpiod_to_irq(gpio_rx_descs[tty->index]));
     }
     mutex_unlock(&(current_tty_mutexes[tty->index]));
     return success;
@@ -232,7 +266,8 @@ int raspberry_soft_uart_close(struct tty_struct* tty)
     printk(KERN_INFO "soft_uart: closing index: %d, NULL status: %d\n", tty->index, current_ttys[tty->index] == NULL);
 
     mutex_lock(&(current_tty_mutexes[tty->index]));
-    disable_irq(gpio_to_irq(gpio_rx[tty->index]));
+    // disable_irq(gpio_to_irq(gpio_rx[tty->index]));
+    disable_irq(gpiod_to_irq(gpio_rx_descs[tty->index]));
     // hrtimer_cancel(&(timer_tx[tty->index]));
     hrtimer_cancel(&(timer_tx_id_data[tty->index]->hr_timer));
     // hrtimer_cancel(&(timer_rx[tty->index]));
@@ -358,7 +393,8 @@ static enum hrtimer_restart handle_tx(struct hrtimer* timer)
     {
         if (dequeue_character(&(queues_tx[tx_id_data->current_uart_index]), &character))
         {
-        gpio_set_value(gpio_tx[tx_id_data->current_uart_index], 0);
+        // gpio_set_value(gpio_tx[tx_id_data->current_uart_index], 0);
+        gpiod_set_value(gpio_tx_descs[tx_id_data->current_uart_index], 0);
         bit_index++;
         must_restart_timer = true;
         }
@@ -367,7 +403,8 @@ static enum hrtimer_restart handle_tx(struct hrtimer* timer)
     // Data bits.
     else if (0 <= bit_index && bit_index < 8)
     {
-        gpio_set_value(gpio_tx[tx_id_data->current_uart_index], 1 & (character >> bit_index));
+        // gpio_set_value(gpio_tx[tx_id_data->current_uart_index], 1 & (character >> bit_index));
+        gpiod_set_value(gpio_tx_descs[tx_id_data->current_uart_index], 1 & (character >> bit_index));
         bit_index++;
         must_restart_timer = true;
     }
@@ -375,7 +412,8 @@ static enum hrtimer_restart handle_tx(struct hrtimer* timer)
     // Stop bit.
     else if (bit_index == 8)
     {
-        gpio_set_value(gpio_tx[tx_id_data->current_uart_index], 1);
+        // gpio_set_value(gpio_tx[tx_id_data->current_uart_index], 1);
+        gpiod_set_value(gpio_tx_descs[tx_id_data->current_uart_index], 1);
         character = 0;
         bit_index = -1;
         must_restart_timer = get_queue_size(&(queues_tx[tx_id_data->current_uart_index])) > 0;
@@ -405,7 +443,8 @@ static enum hrtimer_restart handle_rx(struct hrtimer* timer)
 
     ktime_t current_time = ktime_get();
     static unsigned int character = 0;
-    int bit_value = gpio_get_value(gpio_rx[rx_id_data->current_uart_index]);
+    // int bit_value = gpio_get_value(gpio_rx[rx_id_data->current_uart_index]);
+    int bit_value = gpiod_get_value(gpio_rx_descs[rx_id_data->current_uart_index]);
     enum hrtimer_restart result = HRTIMER_NORESTART;
     bool must_restart_timer = false;
     
