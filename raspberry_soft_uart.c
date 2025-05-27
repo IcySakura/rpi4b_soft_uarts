@@ -49,6 +49,16 @@ static int bcm_to_rpi5_gpio(const int bcm_gpio)
     return -1; /* Invalid GPIO */
 }
 
+/* Convert BCM GPIO number to system GPIO number for Raspberry Pi 4 new kernels */
+static int bcm_to_rpi4_gpio(const int bcm_gpio)
+{
+    /* On Raspberry Pi 4 new kernels, BCM GPIO 0-27 are mapped to system GPIO 512-577 */
+    if (bcm_gpio >= 0 && bcm_gpio <= 27) {
+        return bcm_gpio + 512;
+    }
+    return -1; /* Invalid GPIO */
+}
+
 /**
  * Initializes the Raspberry Soft UART infrastructure.
  * This must be called during the module initialization.
@@ -58,8 +68,8 @@ static int bcm_to_rpi5_gpio(const int bcm_gpio)
  * @param gpio_rx GPIO pins used as RXs
  * @return 1 if the initialization is successful. 0 otherwise.
  */
-// int raspberry_soft_uart_init(const unsigned _gpio_tx[], const unsigned _gpio_rx[])
-int raspberry_soft_uart_init(const char* _gpio_tx[], const char* _gpio_rx[])
+int raspberry_soft_uart_init(const unsigned _gpio_tx[], const unsigned _gpio_rx[])
+// int raspberry_soft_uart_init(const char* _gpio_tx[], const char* _gpio_rx[])
 {
     printk(KERN_INFO "soft_uart: calling raspberry_soft_uart_init.\n");
     bool success = true;
@@ -115,36 +125,38 @@ int raspberry_soft_uart_init(const char* _gpio_tx[], const char* _gpio_rx[])
         // gpio_rx[i] = _gpio_rx[i];
 
         // if (gpio_request(_gpio_tx[i], "soft_uart_tx") != 0)
-        // {
-        //     printk(KERN_ALERT "soft_uart: Failed to request GPIO %d for TX pin %s.\n", _gpio_tx[i], _gpio_tx[i]);
-        //     success = false;
-        //     goto Done_init;
-        // }
-        // gpio_tx_descs[i] = gpio_to_desc(_gpio_tx[i]);
-        // gpio_tx_descs[i] = gpio_to_desc(bcm_to_rpi5_gpio(_gpio_tx[i]));
-        gpio_tx_descs[i] = gpiod_get(NULL, _gpio_tx[i], GPIOD_OUT_LOW);
-        if (IS_ERR(gpio_tx_descs[i]))
+        if (gpio_request(bcm_to_rpi4_gpio(_gpio_tx[i]), "soft_uart_tx") != 0)
         {
-            printk(KERN_ALERT "soft_uart: Failed to get GPIO descriptor for TX pin %s.\n", _gpio_tx[i]);
+            printk(KERN_ALERT "soft_uart: Failed to request tx GPIO %d.\n", bcm_to_rpi4_gpio(_gpio_tx[i]));
             success = false;
             goto Done_init;
         }
+        // gpio_tx_descs[i] = gpio_to_desc(_gpio_tx[i]);
+        gpio_tx_descs[i] = gpio_to_desc(bcm_to_rpi4_gpio(_gpio_tx[i]));
+        // gpio_tx_descs[i] = gpiod_get(NULL, _gpio_tx[i], GPIOD_OUT_LOW);
+        // if (IS_ERR(gpio_tx_descs[i]))
+        // {
+        //     printk(KERN_ALERT "soft_uart: Failed to get GPIO descriptor for TX pin %s.\n", _gpio_tx[i]);
+        //     success = false;
+        //     goto Done_init;
+        // }
 
         // if (gpio_request(_gpio_rx[i], "soft_uart_rx") != 0)
-        // {
-        //     printk(KERN_ALERT "soft_uart: Failed to request GPIO %d for RX pin %s.\n", _gpio_rx[i], _gpio_rx[i]);
-        //     success = false;
-        //     goto Done_init;
-        // }
-        // gpio_rx_descs[i] = gpio_to_desc(_gpio_rx[i]);
-        // gpio_rx_descs[i] = gpio_to_desc(bcm_to_rpi5_gpio(_gpio_rx[i]));
-        gpio_rx_descs[i] = gpiod_get(NULL, _gpio_rx[i], GPIOD_IN);
-        if (IS_ERR(gpio_rx_descs[i]))
+        if (gpio_request(bcm_to_rpi4_gpio(_gpio_rx[i]), "soft_uart_rx") != 0)
         {
-            printk(KERN_ALERT "soft_uart: Failed to get GPIO descriptor for RX pin %s.\n", _gpio_rx[i]);
+            printk(KERN_ALERT "soft_uart: Failed to request rx GPIO %d.\n", bcm_to_rpi4_gpio(_gpio_rx[i]));
             success = false;
             goto Done_init;
         }
+        // gpio_rx_descs[i] = gpio_to_desc(_gpio_rx[i]);
+        gpio_rx_descs[i] = gpio_to_desc(bcm_to_rpi4_gpio(_gpio_rx[i]));
+        // gpio_rx_descs[i] = gpiod_get(NULL, _gpio_rx[i], GPIOD_IN);
+        // if (IS_ERR(gpio_rx_descs[i]))
+        // {
+        //     printk(KERN_ALERT "soft_uart: Failed to get GPIO descriptor for RX pin %s.\n", _gpio_rx[i]);
+        //     success = false;
+        //     goto Done_init;
+        // }
 
         // request_result = gpio_request(gpio_tx[i], "soft_uart_tx");
         // success &= request_result == 0;
@@ -189,8 +201,8 @@ Done_init:
 /**
  * Finalizes the Raspberry Soft UART infrastructure.
  */
-// int raspberry_soft_uart_finalize(const unsigned _gpio_tx[], const unsigned _gpio_rx[])
-int raspberry_soft_uart_finalize(void)
+int raspberry_soft_uart_finalize(const unsigned _gpio_tx[], const unsigned _gpio_rx[])
+// int raspberry_soft_uart_finalize(void)
 {
     printk(KERN_INFO "soft_uart: finalizing soft uart...\n");
 
@@ -204,10 +216,10 @@ int raspberry_soft_uart_finalize(void)
         // gpio_set_value(gpio_tx[i], 0);
         gpiod_set_value(gpio_tx_descs[i], 0);
 
-        // gpio_free(_gpio_tx[i]);
-        // gpio_free(_gpio_rx[i]);
-        gpiod_put(gpio_tx_descs[i]);
-        gpiod_put(gpio_rx_descs[i]);
+        gpio_free(bcm_to_rpi4_gpio(_gpio_tx[i]));
+        gpio_free(bcm_to_rpi4_gpio(_gpio_rx[i]));
+        // gpiod_put(gpio_tx_descs[i]);
+        // gpiod_put(gpio_rx_descs[i]);
     }
 
     // below is for freeing mem
@@ -373,14 +385,7 @@ int raspberry_soft_uart_set_rx_callback(void (*callback)(unsigned char))
  */
 static irqreturn_t handle_rx_start(int irq, void *device)
 {
-    // printk(KERN_INFO "soft_uart: calling handle_rx_start.\n");
-
-    // if (device == NULL)
-    //     printk(KERN_INFO "soft_uart: handle_rx_start has NULL for uart index.\n");
-
     int uart_index = *(int*)device;
-
-    // printk(KERN_INFO "soft_uart: calling handle_rx_start with uart_index: %d.\n", uart_index);
 
     if (rx_bit_index == -1)
     {
@@ -456,10 +461,6 @@ static enum hrtimer_restart handle_rx(struct hrtimer* timer)
 
     struct hrtimer_identifier_data *rx_id_data = container_of(timer, struct hrtimer_identifier_data, hr_timer);
 
-    // if (rx_id_data == NULL)
-    //     printk(KERN_INFO "soft_uart: handle_rx has NULL for rx_id_data.\n");
-    // printk(KERN_INFO "soft_uart: handle_rx for index: %d\n", rx_id_data->current_uart_index);
-
     ktime_t current_time = ktime_get();
     static unsigned int character = 0;
     // int bit_value = gpio_get_value(gpio_rx[rx_id_data->current_uart_index]);
@@ -518,7 +519,7 @@ void receive_character(int index, unsigned char character)
 {
     // printk(KERN_INFO "soft_uart: receive_character for index: %d\n", index);
 
-    mutex_lock(&(current_tty_mutexes[index]));
+    // mutex_lock(&(current_tty_mutexes[index]));
     if (rx_callback != NULL) {
         (*rx_callback)(character);
     } else {
@@ -536,5 +537,5 @@ void receive_character(int index, unsigned char character)
     }
 #endif
     }
-    mutex_unlock(&(current_tty_mutexes[index]));
+    // mutex_unlock(&(current_tty_mutexes[index]));
 }

@@ -9,10 +9,10 @@
 #define NONE                       0
 #define TX_BUFFER_FLUSH_TIMEOUT 4000  // milliseconds
 
-// int raspberry_soft_uart_init(const unsigned gpio_tx[], const unsigned gpio_rx[]);
-int raspberry_soft_uart_init(const char* _gpio_tx[], const char* _gpio_rx[]);
-// int raspberry_soft_uart_finalize(const unsigned _gpio_tx[], const unsigned _gpio_rx[]);
-int raspberry_soft_uart_finalize(void);
+int raspberry_soft_uart_init(const unsigned gpio_tx[], const unsigned gpio_rx[]);
+// int raspberry_soft_uart_init(const char* _gpio_tx[], const char* _gpio_rx[]);
+int raspberry_soft_uart_finalize(const unsigned _gpio_tx[], const unsigned _gpio_rx[]);
+// int raspberry_soft_uart_finalize(void);
 int raspberry_soft_uart_open(struct tty_struct* tty);
 int raspberry_soft_uart_close(struct tty_struct* tty);
 int raspberry_soft_uart_set_baudrate(const int index, const int baudrate);
