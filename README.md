@@ -30,7 +30,7 @@ sudo apt-get install raspberrypi-kernel-headers
 
 Run `make` and `make install`, as usual.
 ```
-cd soft_uart
+cd rpi4b_soft_uarts
 make
 sudo make install
 ```
@@ -64,7 +64,7 @@ sudo usermod -aG dialout <username>
 
 Usage examples:
 ```
-minicom -b 4800 -D /dev/ttySOFT0
+minicom -b 9600 -D /dev/ttySOFT0
 cat /dev/ttySOFT0
 echo "hello" > /dev/ttySOFT0
 ```
@@ -76,4 +76,4 @@ When choosing the baud rate, take into account that:
 * You will probably not be running a real-time operating system.
 * There will be other processes competing for CPU time.
 
-As a result, you can expect communication errors when using fast baud rates. So I would not try to go any faster than 4800 bps.
+As a result, you can expect communication errors when using fast baud rates. So I would not try to go any faster than 9600 bps.

@@ -12,12 +12,12 @@ MODULE_AUTHOR("Adriano Marto Reis and Myles Liu");
 MODULE_DESCRIPTION("Software-UART for Raspberry Pi");
 MODULE_VERSION("0.3");
 
-static unsigned gpio_tx[8] = {2, 13, 15, 17, 22, 24, 9, 8};
+static unsigned gpio_tx[8] = {2, 4, 15, 17, 22, 24, 9, 8};
 // static char* gpio_tx_names[8] = {"SDA1", "GPIO_GCLK", "RXD1", "GPIO17", "GPIO22", "GPIO24", "SPI_MISO", "SPI_CE0_N"};
 // static char* gpio_tx_names[8] = {"SDA1", "GPIO_GCLK", "RXD1", "GPIO17", "GPIO22", "GPIO24", "SPI_MISO", "SPI_CE0_N"};
 // module_param_array(gpio_tx, int, NULL, 0);
 
-static unsigned gpio_rx[8] = {3, 19, 18, 27, 23, 10, 25, 11};
+static unsigned gpio_rx[8] = {3, 14, 18, 27, 23, 10, 25, 11};
 // static char* gpio_rx_names[8] = {"SCL1", "GPIO14", "GPIO18", "GPIO27", "GPIO23", "SPI_MOSI", "GPIO25", "SPI_SCLK"};
 // module_param_array(gpio_rx, int, NULL, 0);
 
