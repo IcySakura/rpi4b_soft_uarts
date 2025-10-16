@@ -335,9 +335,10 @@ static irqreturn_t handle_rx_start(int irq, void *device)
  */
 static enum hrtimer_restart handle_tx(struct hrtimer* timer)
 {
+    ktime_t current_time = ktime_get();
+
     struct hrtimer_identifier_data *tx_id_data = container_of(timer, struct hrtimer_identifier_data, hr_timer);
 
-    ktime_t current_time = ktime_get();
     enum hrtimer_restart result = HRTIMER_NORESTART;
     bool must_restart_timer = false;
     
@@ -372,7 +373,7 @@ static enum hrtimer_restart handle_tx(struct hrtimer* timer)
     // Restarts the TX timer.
     if (must_restart_timer)
     {
-        hrtimer_forward(&(timer_tx_id_data[tx_id_data->current_uart_index]->hr_timer), current_time, period);
+        hrtimer_forward(&(tx_id_data->hr_timer), current_time, period);
         result = HRTIMER_RESTART;
     }
     
@@ -391,7 +392,7 @@ static enum hrtimer_restart handle_rx(struct hrtimer* timer)
     enum hrtimer_restart result = HRTIMER_NORESTART;
     bool must_restart_timer = false;
 
-    printk(KERN_INFO "soft_uart: handle_rx called with current_uart_index: %d and rx_bit_index: %d and bit_value: %d.\n", rx_id_data->current_uart_index, rx_id_data->bit_index, bit_value);
+    // printk(KERN_INFO "soft_uart: handle_rx called with current_uart_index: %d and rx_bit_index: %d and bit_value: %d.\n", rx_id_data->current_uart_index, rx_id_data->bit_index, bit_value);
     
     // Start bit.
     if ((rx_id_data->bit_index) == -1)
@@ -428,7 +429,7 @@ static enum hrtimer_restart handle_rx(struct hrtimer* timer)
     // Restarts the RX timer.
     if (must_restart_timer)
     {
-        hrtimer_forward(&(timer_rx_id_data[rx_id_data->current_uart_index]->hr_timer), current_time, period);
+        hrtimer_forward(&(rx_id_data->hr_timer), current_time, period);
         result = HRTIMER_RESTART;
     }
     
@@ -442,7 +443,7 @@ static enum hrtimer_restart handle_rx(struct hrtimer* timer)
  */
 void receive_character(const int index, const unsigned char character)
 {
-    printk(KERN_INFO "soft_uart: receive_character for index: %d with character: %c\n", index, character);
+    // printk(KERN_INFO "soft_uart: receive_character for index: %d with character: %c\n", index, character);
 
     if (rx_callback != NULL) {
         (*rx_callback)(character);
