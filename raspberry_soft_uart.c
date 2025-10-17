@@ -254,7 +254,6 @@ int raspberry_soft_uart_set_baudrate(const int index, const int baudrate)
 
     period = ktime_set(0, 1000000000/baudrate);
     half_period = ktime_set(0, 1000000000/baudrate/2);
-    // gpiod_set_debounce(gpio_rx_descs[index], 1000/baudrate/2);
     return 1;
 }
 
@@ -267,8 +266,6 @@ int raspberry_soft_uart_set_baudrate(const int index, const int baudrate)
  */
 int raspberry_soft_uart_send_string(const int index, const unsigned char* string, const int string_size)
 {
-    // printk(KERN_INFO "soft_uart: sending string with size: %d to index: %d\n", string_size, index);
-
     int result = enqueue_string(&(queues_tx[index]), string, string_size);
     
     // Starts the TX timer if it is not already running.
@@ -304,8 +301,6 @@ int raspberry_soft_uart_get_tx_queue_size(const int index)
  */
 int raspberry_soft_uart_set_rx_callback(void (*callback)(const unsigned char))
 {
-    // printk(KERN_INFO "soft_uart: calling raspberry_soft_uart_set_rx_callback.\n");
-
 	rx_callback = callback;
 	return 1;
 }
@@ -354,7 +349,7 @@ static enum hrtimer_restart handle_tx(struct hrtimer* timer)
     }
     
     // Data bits.
-    else if (0 <= (tx_id_data->bit_index) && (tx_id_data->bit_index) < 8)
+    else if ((tx_id_data->bit_index) < 8)
     {
         gpiod_set_value(gpio_tx_descs[tx_id_data->current_uart_index], 1 & ((tx_id_data->character) >> (tx_id_data->bit_index)));
         (tx_id_data->bit_index)++;
@@ -362,9 +357,10 @@ static enum hrtimer_restart handle_tx(struct hrtimer* timer)
     }
     
     // Stop bit.
-    else if ((tx_id_data->bit_index) == 8)
+    else
     {
         gpiod_set_value(gpio_tx_descs[tx_id_data->current_uart_index], 1);
+
         (tx_id_data->character) = 0;
         (tx_id_data->bit_index) = -1;
         must_restart_timer = get_queue_size(&(queues_tx[tx_id_data->current_uart_index])) > 0;
@@ -387,7 +383,6 @@ static enum hrtimer_restart handle_rx(struct hrtimer* timer)
 {
     ktime_t current_time = ktime_get();
     struct hrtimer_identifier_data *rx_id_data = container_of(timer, struct hrtimer_identifier_data, hr_timer);
-
     int bit_value = gpiod_get_value(gpio_rx_descs[rx_id_data->current_uart_index]);
     enum hrtimer_restart result = HRTIMER_NORESTART;
     bool must_restart_timer = false;
@@ -397,13 +392,16 @@ static enum hrtimer_restart handle_rx(struct hrtimer* timer)
     // Start bit.
     if ((rx_id_data->bit_index) == -1)
     {
-        (rx_id_data->bit_index)++;
-        (rx_id_data->character) = 0;
-        must_restart_timer = true;
+        // TEMP: handle invalid frame coming in
+        if (bit_value == 0)
+        {
+            (rx_id_data->bit_index) = 0;
+            (rx_id_data->character) = 0;
+            must_restart_timer = true;
+        }
     }
-    
     // Data bits.
-    else if (0 <= (rx_id_data->bit_index) && (rx_id_data->bit_index) < 8)
+    else if ((rx_id_data->bit_index) < 8)
     {
         if (bit_value == 0)
         {
@@ -420,7 +418,7 @@ static enum hrtimer_restart handle_rx(struct hrtimer* timer)
     }
     
     // Stop bit.
-    else if ((rx_id_data->bit_index) == 8)
+    else
     {
         receive_character(rx_id_data->current_uart_index, (rx_id_data->character));
         (rx_id_data->bit_index) = -1;
